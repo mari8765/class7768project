@@ -11,9 +11,13 @@
  * - BASESCAN_API_KEY: Optional, for verification
  */
 
-import ethers from "ethers";
+import * as ethers from "ethers";
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Read contract ABIs
 const readABI = (contractName: string): string => {

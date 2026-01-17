@@ -52,22 +52,33 @@ export default function Profile() {
 
   if (!user) return null;
 
-  // Prefer server-side profile values (username, firstName) when available.
-  const displayName =
+  // Get wallet address from Privy
+  const walletAddress = privyUser?.wallet?.address;
+  
+  // Truncate wallet address for display (first 6 + last 4 chars)
+  const truncatedAddress = walletAddress 
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+    : null;
+
+  // Prefer wallet address as display name if connected, otherwise use the old logic
+  const displayName = truncatedAddress || 
     userProfile?.firstName || user.firstName || (user as any)?.name || userProfile?.username || user.username || 'User'
-  const usernameToShow = userProfile?.username || user.username || '';
+  const usernameToShow = truncatedAddress || userProfile?.username || user.username || '';
 
   const shareProfile = () => {
     const currentUsername = usernameToShow || userProfile?.username || user.username;
     if (!currentUsername) {
       toast({
         title: "Error",
-        description: "Username not found. Please set a username in settings.",
+        description: "Username or wallet address not found.",
         variant: "destructive"
       });
       return;
     }
-    const shareUrl = `${window.location.origin}/@${currentUsername}`;
+    // For wallet addresses, use the address directly; for usernames, prepend @
+    const shareUrl = truncatedAddress 
+      ? `${window.location.origin}/@${walletAddress}`
+      : `${window.location.origin}/@${currentUsername}`;
     if (navigator.share) {
       navigator.share({
         title: 'Check out my profile on BetChat',

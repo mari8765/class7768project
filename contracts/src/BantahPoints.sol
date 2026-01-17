@@ -27,7 +27,7 @@ contract BantahPoints is ERC20, ERC20Burnable, Ownable {
     event PointsTransferred(address indexed from, address indexed to, uint256 amount);
     event PointsManagerUpdated(address indexed newManager);
     
-    constructor() ERC20("Bantah Points", "BPTS") {
+    constructor() ERC20("Bantah Points", "BPTS") Ownable(msg.sender) {
         pointsManager = msg.sender;
         // Initial supply: 1 million points (18 decimals)
         _mint(msg.sender, 1000000 * 10 ** decimals());

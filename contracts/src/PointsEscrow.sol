@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./BantahPoints.sol";
 
 /**
@@ -58,7 +58,7 @@ contract PointsEscrow is ReentrancyGuard, Ownable {
     }
     
     // Constructor
-    constructor(address _pointsToken, address _challengeFactory) {
+    constructor(address _pointsToken, address _challengeFactory) Ownable(msg.sender) {
         require(_pointsToken != address(0), "Invalid points token");
         require(_challengeFactory != address(0), "Invalid factory");
         pointsToken = BantahPoints(_pointsToken);

@@ -94,6 +94,12 @@ export default function Challenges() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [preSelectedUser, setPreSelectedUser] = useState<any>(null);
+  const [createFormData, setCreateFormData] = useState({
+    title: '',
+    description: '',
+    category: 'general',
+    amount: 100,
+  });
 
   // Listen for header search events dispatched from Navigation
   useEffect(() => {
@@ -185,40 +191,54 @@ export default function Challenges() {
   }, [queryClient]);
 
   const createChallengeMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof createChallengeSchema>) => {
-      const challengeData = {
-        ...data,
-        amount: data.amount, // Keep as string for backend validation
-        dueDate: data.dueDate
-          ? new Date(data.dueDate).toISOString()
-          : undefined,
-      };
-      await apiRequest("POST", "/api/challenges", challengeData);
+    mutationFn: async (formData: typeof createFormData) => {
+      // For now, create with USDC on Base Sepolia
+      const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b3566dA8860';
+      
+      const response = await fetch('/api/challenges/create-admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          category: formData.category,
+          stakeAmount: (formData.amount * 1e6).toString(), // Convert to 6 decimals for USDC
+          paymentToken: USDC_ADDRESS,
+          metadataURI: 'ipfs://bafytest', // Placeholder IPFS URI
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create challenge');
+      }
+
+      return response.json();
     },
     onSuccess: () => {
       toast({
         title: "Challenge Created",
-        description: "Your challenge has been sent!",
+        description: "Your blockchain challenge has been created!",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       setIsCreateDialogOpen(false);
-      setPreSelectedUser(null);
+      setCreateFormData({ title: '', description: '', category: 'general', amount: 100 });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
+      if (error.message.includes('401') || error.message.includes('Unauthorized')) {
         toast({
           title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
+          description: "Please log in to create a challenge",
           variant: "destructive",
         });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
         return;
       }
       toast({
         title: "Error",
-        description: error.message,
+        description: error.message || 'Failed to create challenge',
         variant: "destructive",
       });
     },
@@ -544,20 +564,22 @@ export default function Challenges() {
                 <label className="block text-sm font-medium mb-2">Title</label>
                 <Input 
                   placeholder="Challenge title"
-                  id="title"
+                  value={createFormData.title}
+                  onChange={(e) => setCreateFormData({...createFormData, title: e.target.value})}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Description</label>
                 <Textarea 
                   placeholder="What's this challenge about?"
-                  id="description"
+                  value={createFormData.description}
+                  onChange={(e) => setCreateFormData({...createFormData, description: e.target.value})}
                   className="min-h-24"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Category</label>
-                <Select>
+                <Select value={createFormData.category} onValueChange={(val) => setCreateFormData({...createFormData, category: val})}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
@@ -573,11 +595,12 @@ export default function Challenges() {
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2">Amount (in points)</label>
+                <label className="block text-sm font-medium mb-2">Amount (in USDC)</label>
                 <Input 
                   type="number"
                   placeholder="100"
-                  id="amount"
+                  value={createFormData.amount}
+                  onChange={(e) => setCreateFormData({...createFormData, amount: parseInt(e.target.value) || 0})}
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -585,20 +608,16 @@ export default function Challenges() {
                   variant="outline" 
                   onClick={() => setIsCreateDialogOpen(false)}
                   className="flex-1"
+                  disabled={createChallengeMutation.isPending}
                 >
                   Cancel
                 </Button>
                 <Button 
-                  onClick={() => {
-                    toast({
-                      title: "Coming Soon",
-                      description: "Challenge creation will be available soon!"
-                    });
-                    setIsCreateDialogOpen(false);
-                  }}
+                  onClick={() => createChallengeMutation.mutate(createFormData)}
                   className="flex-1 bg-[#ccff00] text-black hover:bg-[#b8e600]"
+                  disabled={createChallengeMutation.isPending || !createFormData.title}
                 >
-                  Create
+                  {createChallengeMutation.isPending ? 'Creating...' : 'Create'}
                 </Button>
               </div>
             </div>

@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "./BantahPoints.sol";
 
 /**
@@ -14,6 +15,7 @@ import "./BantahPoints.sol";
  */
 contract ChallengeFactory is ReentrancyGuard, Ownable {
     using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
     
     // Enums
     enum ChallengeType { ADMIN, P2P }
@@ -278,8 +280,8 @@ contract ChallengeFactory is ReentrancyGuard, Ownable {
         
         // Verify admin signature
         bytes32 messageHash = keccak256(abi.encodePacked(challengeId, winner, pointsAwarded));
-        bytes32 ethSignedMessage = messageHash.toEthSignedMessageHash();
-        address signer = ethSignedMessage.recover(signature);
+        bytes32 ethSignedMessage = MessageHashUtils.toEthSignedMessageHash(messageHash);
+        address signer = ECDSA.recover(ethSignedMessage, signature);
         
         require(signer == admin, "Invalid admin signature");
         
