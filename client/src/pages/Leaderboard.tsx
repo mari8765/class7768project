@@ -27,7 +27,25 @@ export default function Leaderboard() {
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["/api/leaderboard"],
+    queryKey: ["/api/points/leaderboard"],
+    queryFn: async () => {
+      const res = await fetch(`/api/points/leaderboard`);
+      if (!res.ok) throw new Error('Failed to fetch leaderboard');
+      return res.json();
+    },
+    select: (data: any) => {
+      // Normalize server response shape { leaderboard: [...] }
+      const list = Array.isArray(data?.leaderboard) ? data.leaderboard : [];
+      return list.map((entry: any) => ({
+        id: entry.userId,
+        username: entry.username || entry.userId,
+        points: entry.pointsBalance ?? entry.points ?? 0,
+        coins: entry.coins ?? 0,
+        profileImage: entry.profileImage,
+        challengesWon: entry.challengesWon ?? 0,
+        level: entry.level ?? 1,
+      }));
+    },
     retry: 1,
     refetchOnWindowFocus: false,
     staleTime: 1000 * 60 * 5, // 5 minutes

@@ -76,6 +76,54 @@ export default function WalletPage() {
     },
   });
 
+  const { data: pointsData } = useQuery({
+    queryKey: ["/api/points/balance", user?.id],
+    enabled: !!user?.id,
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`/api/points/balance/${user.id}`);
+      if (!res.ok) throw new Error('Failed to fetch points balance');
+      return res.json();
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          window.location.href = "/api/login";
+        }, 500);
+      }
+    },
+  });
+
+  const { data: walletsData } = useQuery({
+    queryKey: ["/api/points/wallets", user?.id],
+    enabled: !!user?.id,
+    retry: false,
+    queryFn: async () => {
+      const res = await fetch(`/api/points/wallets`);
+      if (!res.ok) throw new Error('Failed to fetch wallets');
+      return res.json();
+    },
+  });
+
+  const setPrimaryMutation = useMutation({
+    mutationFn: async (walletId: number) => {
+      return await apiRequest("POST", `/api/points/set-primary-wallet/${walletId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Primary wallet updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to set primary wallet", description: err.message, variant: "destructive" });
+    },
+  });
+
   const { data: transactions = [], isLoading } = useQuery({
     queryKey: ["/api/transactions"],
     retry: false,
@@ -208,6 +256,20 @@ export default function WalletPage() {
     },
   });
 
+  const setPrimaryMutation = useMutation({
+    mutationFn: async (walletId: number) => {
+      return await apiRequest("POST", `/api/points/set-primary-wallet/${walletId}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Primary wallet updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/points/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallet/balance"] });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update primary", description: error.message, variant: "destructive" });
+    },
+  });
+
   const handleDeposit = () => {
     const amount = parseFloat(depositAmount);
     const now = Date.now();
@@ -285,6 +347,12 @@ export default function WalletPage() {
     typeof balance === "object" ? balance.balance || 0 : balance || 0;
   const currentCoins = typeof balance === "object" ? balance.coins || 0 : 0;
 
+  const currentPointsDisplay = pointsData?.balanceFormatted ?? '0';
+  const currentPointsShort = (() => {
+    const n = parseFloat(String(pointsData?.balanceFormatted ?? '0')) || 0;
+    return n > 999 ? '1K+' : Math.round(n).toString();
+  })();
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 theme-transition pb-[50px]">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -335,6 +403,36 @@ export default function WalletPage() {
               </h3>
             </div>
           </div>
+        </div>
+
+        {/* Connected Wallets */}
+        <div className="mt-6">
+          <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Connected Wallets</h4>
+          {!walletsData?.wallets || walletsData.wallets.length === 0 ? (
+            <div className="text-xs text-slate-500">No connected wallets found.</div>
+          ) : (
+            <div className="space-y-3">
+              {walletsData.wallets.map((w: any) => (
+                <div key={w.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border">
+                  <div>
+                    <div className="text-sm font-medium text-slate-800 dark:text-slate-100">{w.address}</div>
+                    <div className="text-xs text-slate-500">{w.type} • {w.isPrimary ? 'Primary' : 'Connected'}</div>
+                    <div className="text-xs text-slate-500 mt-1">USDC: {w.usdcBalance ? Number(w.usdcBalance) / 1e6 : 0} • Points: {w.pointsBalance ? Number(w.pointsBalance) / 1e18 : 0}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!w.isPrimary && (
+                      <Button size="sm" onClick={() => setPrimaryMutation.mutate(w.id)}>
+                        Set primary
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigator.clipboard.writeText(w.address)}>
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quick Actions */}

@@ -18,7 +18,9 @@
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+    "@lit/reactive-element": "^2.1.2",
     "@openzeppelin/contracts": "^5.4.0",
+    "@phosphor-icons/webcomponents": "^2.1.5",
     "@privy-io/react-auth": "^3.3.0",
     "@privy-io/server-auth": "^1.32.5",
     "@radix-ui/react-accordion": "^1.2.4",
@@ -64,7 +66,7 @@
     "cmdk": "^1.1.1",
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
-    "date-fns": "^3.6.0",
+    "date-fns": "^2.30.0",
     "dotenv": "^17.2.0",
     "drizzle-orm": "^0.39.1",
     "drizzle-zod": "^0.7.0",
