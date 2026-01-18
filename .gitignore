@@ -8,3 +8,4 @@ vite.config.ts.*
 
 # Local env
 .env
+firebase-service-account.json
