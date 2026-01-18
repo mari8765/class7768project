@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useBlockchainChallenge } from "@/hooks/useBlockchainChallenge";
+import { AcceptChallengeModal } from "@/components/AcceptChallengeModal";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +49,8 @@ const createChallengeSchema = z.object({
     const [showChallengeModal, setShowChallengeModal] = useState(false);
     const [selectedUser, setSelectedUser] = useState<any>(null);
     const [pendingFriendId, setPendingFriendId] = useState<string | null>(null);
+    const [showAcceptModal, setShowAcceptModal] = useState(false);
+    const [selectedChallengeToAccept, setSelectedChallengeToAccept] = useState<any>(null);
 
   const form = useForm<z.infer<typeof createChallengeSchema>>({
     resolver: zodResolver(createChallengeSchema),
@@ -161,17 +165,48 @@ const createChallengeSchema = z.object({
     },
   });
 
+  const { createP2PChallenge } = useBlockchainChallenge();
+
   const createChallengeMutation = useMutation({
     mutationFn: async (data: z.infer<typeof createChallengeSchema>) => {
+      const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b3566dA8860';
+      
+      // Step 1: Store challenge in database
       const challengeData = {
-        challenged: selectedUser?.id || data.challenged,
+        opponentId: selectedUser?.id || data.challenged,
         title: data.title,
         description: data.description,
-        category: data.category,
-        amount: parseFloat(data.amount),
-        dueDate: data.dueDate,
+        stakeAmount: data.amount,
+        paymentToken: USDC_ADDRESS,
+        metadataURI: 'ipfs://bafytest',
       };
-      return await apiRequest("POST", "/api/challenges", challengeData);
+      
+      const response = await apiRequest("POST", "/api/challenges/create-p2p", challengeData);
+      
+      // Step 2: Sign and submit to blockchain
+      // Convert amount to wei (USDC has 6 decimals)
+      const stakeWei = String(Math.floor(parseFloat(data.amount) * 1e6));
+      const pointsReward = "500"; // Fixed points for now
+      
+      toast({
+        title: "Challenge Created",
+        description: "Preparing blockchain transaction...",
+      });
+
+      try {
+        await createP2PChallenge({
+          opponentAddress: selectedUser?.id || data.challenged,
+          stakeAmount: stakeWei,
+          paymentToken: USDC_ADDRESS,
+          pointsReward,
+          metadataURI: 'ipfs://bafytest',
+        });
+      } catch (blockchainError: any) {
+        console.warn('Blockchain submission failed, but challenge is stored in DB:', blockchainError);
+        // Don't throw - challenge is already in DB, user can retry signing later
+      }
+      
+      return response;
     },
     onSuccess: () => {
       toast({
@@ -824,6 +859,20 @@ const createChallengeSchema = z.object({
           </Form>
         </DialogContent>
       </Dialog>
+
+      {/* Accept Challenge Modal */}
+      <AcceptChallengeModal
+        isOpen={showAcceptModal}
+        onClose={() => {
+          setShowAcceptModal(false);
+          setSelectedChallengeToAccept(null);
+        }}
+        challenge={selectedChallengeToAccept}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
+        }}
+      />
+
       <MobileNavigation />
     </div>
   );

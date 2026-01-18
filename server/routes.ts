@@ -6,6 +6,7 @@ import { PrivyAuthMiddleware } from "./privyAuth";
 import { setupOGImageRoutes } from "./ogImageGenerator";
 import ogMetadataRouter from './routes/og-metadata';
 import { registerBlockchainRoutes } from './routes/index';
+import { initializeBlockchain } from './blockchain/init';
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -25,6 +26,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
 
   await setupAuth(app);
+
+  // Initialize blockchain client
+  try {
+    console.log('🚀 Initializing blockchain client...');
+    await initializeBlockchain();
+  } catch (error: any) {
+    console.error('⚠️  Blockchain initialization warning:', error.message);
+    console.error('   Challenge creation will not work until contracts are deployed');
+  }
 
   // Profile routes
   app.get('/api/profile', PrivyAuthMiddleware, async (req: AuthenticatedRequest, res) => {

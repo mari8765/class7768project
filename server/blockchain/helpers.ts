@@ -40,11 +40,13 @@ export async function createAdminChallenge(
   stakeAmount: string,
   paymentToken: string,
   metadataURI: string,
-  userSigner: Signer
+  userSigner?: Signer
 ) {
   const client = getBlockchainClient();
   try {
-    const contract = client.getChallengeFactoryForUser(userSigner);
+    // For admin-created challenges, use the admin signer from the blockchain client
+    // The admin is the contract owner and can create challenges on behalf of users
+    const contract = client.getChallengeFactoryForWriting();
     
     // Convert stake amount to wei
     const stakeWei = ethers.parseUnits(stakeAmount, 6); // USDC/USDT are 6 decimals

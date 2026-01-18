@@ -208,6 +208,15 @@ export const challenges = pgTable("challenges", {
   firstTimeBonusEnabled: boolean("first_time_bonus_enabled").default(false),
   socialTagBonus: integer("social_tag_bonus").default(0), // Bonus for tagging friends
   isPinned: boolean("is_pinned").default(false), // Admin-only: pin challenge to top of feed
+  // P2P Blockchain fields
+  paymentTokenAddress: varchar("payment_token_address"), // ERC20 token contract address (USDC, USDT, etc.)
+  stakeAmountWei: bigint("stake_amount_wei"), // Stake amount in wei (smallest unit)
+  onChainStatus: varchar("on_chain_status").default("pending"), // pending, submitted, confirmed, failed, completed
+  creatorTransactionHash: varchar("creator_transaction_hash"), // Hash of creator's blockchain tx
+  acceptorTransactionHash: varchar("acceptor_transaction_hash"), // Hash of acceptor's blockchain tx
+  blockchainChallengeId: varchar("blockchain_challenge_id"), // ID from smart contract
+  blockchainCreatedAt: timestamp("blockchain_created_at"), // When tx was confirmed on-chain
+  blockchainAcceptedAt: timestamp("blockchain_accepted_at"), // When acceptor signed and tx confirmed
 });
 
 // Pairing queue for challenge matching (FCFS with stake tolerance)
@@ -318,6 +327,7 @@ export const notifications = pgTable("notifications", {
   message: text("message"),
   icon: varchar("icon"), // emoji icon
   data: jsonb("data"),
+  challengeId: integer("challenge_id"), // Reference to challenge if this notification is about a challenge
   channels: text("channels").array(), // in_app_feed, push_notification, telegram_bot
   fomoLevel: varchar("fomo_level").default('low'), // low, medium, high, urgent
   priority: integer("priority").default(1), // 1=low, 2=medium, 3=high, 4=urgent

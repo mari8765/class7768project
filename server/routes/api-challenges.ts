@@ -5,6 +5,7 @@
 
 import { Router, Request, Response } from 'express';
 import { isAuthenticated } from '../auth';
+import { NotificationService, NotificationEvent, NotificationChannel, NotificationPriority } from '../notificationService';
 import {
   createAdminChallenge,
   createP2PChallenge,
@@ -24,10 +25,11 @@ import {
   getUserPrimaryWallet,
 } from '../blockchain/db-utils';
 import { db } from '../db';
-import { challenges } from '../../shared/schema';
+import { challenges, users } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
 
 const router = Router();
+const notificationService = new NotificationService();
 
 /**
  * GET /api/challenges/public
@@ -105,8 +107,7 @@ router.post('/create-admin', isAuthenticated, async (req: Request, res: Response
     const txResult = await createAdminChallenge(
       stakeAmount,
       paymentToken,
-      metadataURI,
-      req.user as any // User signer would come from Privy
+      metadataURI
     );
 
     // Update database with blockchain info
@@ -143,6 +144,7 @@ router.post('/create-admin', isAuthenticated, async (req: Request, res: Response
 /**
  * POST /api/challenges/create-p2p
  * Create a P2P challenge between two users
+ * Note: User must sign the blockchain transaction client-side with their wallet
  */
 router.post('/create-p2p', isAuthenticated, async (req: Request, res: Response) => {
   try {
@@ -167,7 +169,8 @@ router.post('/create-p2p', isAuthenticated, async (req: Request, res: Response) 
 
     console.log(`\n💾 Creating P2P challenge: ${userId} vs ${opponentId}...`);
 
-    // Create in database
+    // Create in database with pending blockchain status
+    // User will sign and submit transaction client-side
     const dbChallenge = await db
       .insert(challenges)
       .values({
@@ -181,37 +184,48 @@ router.post('/create-p2p', isAuthenticated, async (req: Request, res: Response) 
         challenged: opponentId,
         paymentTokenAddress: paymentToken,
         stakeAmountWei: BigInt(ethers.parseUnits(stakeAmount, 6).toString()),
-        onChainStatus: 'pending',
+        onChainStatus: 'pending', // Waiting for user to sign and submit
       })
       .returning();
 
     const challengeId = dbChallenge[0].id;
 
-    // Create on-chain
-    const txResult = await createP2PChallenge(
-      opponentId, // opponent wallet
-      stakeAmount,
-      paymentToken,
-      metadataURI,
-      req.user as any
-    );
+    console.log(`✅ P2P challenge created in DB: ${challengeId}`);
+    console.log(`📝 User must sign transaction client-side to complete`);
 
-    // Update with blockchain info
-    await db
-      .update(challenges)
-      .set({
-        blockchainCreationTxHash: txResult.transactionHash,
-        onChainStatus: 'created',
-      })
-      .where(eq(challenges.id, challengeId));
+    // Get challenger name for notification
+    const challenger = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const challengerName = challenger[0]?.firstName || 'Someone';
+
+    // Send notification to opponent
+    await notificationService.send({
+      userId: opponentId,
+      challengeId: challengeId.toString(),
+      event: NotificationEvent.CHALLENGE_CREATED,
+      title: `🎯 ${challengerName} challenged you!`,
+      body: `${challengerName} challenged you to: "${title}"`,
+      channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+      priority: NotificationPriority.MEDIUM,
+      data: {
+        challengeId: challengeId,
+        title,
+        stakeAmount,
+        challenger: userId,
+      },
+    }).catch(err => {
+      console.warn('Failed to send challenge notification:', err.message);
+      // Don't fail the challenge creation if notification fails
+    });
+
+    console.log(`📬 Notification sent to opponent ${opponentId}`);
 
     res.json({
       success: true,
       challengeId,
-      transactionHash: txResult.transactionHash,
       title,
       opponent: opponentId,
       stakeAmount,
+      message: 'Challenge created. User must sign transaction to activate.',
     });
   } catch (error: any) {
     console.error('Failed to create P2P challenge:', error);
@@ -357,6 +371,33 @@ router.post('/:id/accept', isAuthenticated, async (req: Request, res: Response) 
       .where(eq(challenges.id, challengeId));
 
     console.log(`✅ P2P challenge accepted: ${txResult.transactionHash}`);
+
+    // Get acceptor name for notification
+    const acceptor = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const acceptorName = acceptor[0]?.firstName || 'Someone';
+
+    // Send notification to challenger that their challenge was accepted
+    if (challenge.challenger) {
+      await notificationService.send({
+        userId: challenge.challenger,
+        challengeId: challengeId.toString(),
+        event: NotificationEvent.CHALLENGE_JOINED_FRIEND,
+        title: `⚔️ ${acceptorName} accepted your challenge!`,
+        body: `${acceptorName} accepted your challenge: "${challenge.title}"`,
+        channels: [NotificationChannel.IN_APP, NotificationChannel.PUSH],
+        priority: NotificationPriority.MEDIUM,
+        data: {
+          challengeId: challengeId,
+          title: challenge.title,
+          acceptor: userId,
+        },
+      }).catch(err => {
+        console.warn('Failed to send acceptance notification:', err.message);
+        // Don't fail the challenge acceptance if notification fails
+      });
+
+      console.log(`📬 Notification sent to challenger ${challenge.challenger}`);
+    }
 
     res.json({
       success: true,

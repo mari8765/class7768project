@@ -6,6 +6,7 @@ import apiChallengesRouter from './api-challenges';
 import apiPayoutsRouter from './api-payouts';
 import apiPointsRouter from './api-points';
 import apiAdminResolveRouter from './api-admin-resolve';
+import apiUserRouter from './api-user';
 
 export function registerBlockchainRoutes(app: express.Application) {
   /**
@@ -54,6 +55,13 @@ export function registerBlockchainRoutes(app: express.Application) {
    * GET /api/admin/challenges/:id/resolution-history - Get history
    */
   app.use('/api/admin/challenges', apiAdminResolveRouter);
+
+  /**
+   * User Account Operations
+   * POST /api/user/fcm-token - Save FCM token for push notifications
+   * GET /api/user/profile - Get current user profile
+   */
+  app.use('/api/user', apiUserRouter);
 
   console.log('✅ Blockchain REST API routes registered:');
   console.log('   - /api/challenges');

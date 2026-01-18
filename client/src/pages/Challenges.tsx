@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
+import { useBlockchainChallenge } from "@/hooks/useBlockchainChallenge";
 import { cn } from "@/lib/utils";
 import { getGlobalChannel } from "@/lib/pusher";
 import { MobileNavigation } from "@/components/MobileNavigation";
@@ -190,24 +191,31 @@ export default function Challenges() {
     };
   }, [queryClient]);
 
+  const { createP2PChallenge } = useBlockchainChallenge();
+
   const createChallengeMutation = useMutation({
     mutationFn: async (formData: typeof createFormData) => {
-      // For now, create with USDC on Base Sepolia
+      // P2P challenges use USDC on Base Sepolia
       const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b3566dA8860';
       
-      const response = await fetch('/api/challenges/create-admin', {
+      if (!preSelectedUser?.id) {
+        throw new Error('Please select an opponent');
+      }
+
+      // Step 1: Store challenge in database
+      const response = await fetch('/api/challenges/create-p2p', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
         body: JSON.stringify({
+          opponentId: preSelectedUser.id,
           title: formData.title,
           description: formData.description,
-          category: formData.category,
-          stakeAmount: (formData.amount * 1e6).toString(), // Convert to 6 decimals for USDC
+          stakeAmount: formData.amount.toString(),
           paymentToken: USDC_ADDRESS,
-          metadataURI: 'ipfs://bafytest', // Placeholder IPFS URI
+          metadataURI: 'ipfs://bafytest',
         }),
       });
 
@@ -216,7 +224,31 @@ export default function Challenges() {
         throw new Error(error.error || 'Failed to create challenge');
       }
 
-      return response.json();
+      const data = await response.json();
+
+      // Step 2: Sign and submit to blockchain
+      const stakeWei = String(Math.floor(formData.amount * 1e6));
+      const pointsReward = "500"; // Fixed points for now
+
+      toast({
+        title: "Challenge Created",
+        description: "Preparing blockchain transaction...",
+      });
+
+      try {
+        await createP2PChallenge({
+          opponentAddress: preSelectedUser.id,
+          stakeAmount: stakeWei,
+          paymentToken: USDC_ADDRESS,
+          pointsReward,
+          metadataURI: 'ipfs://bafytest',
+        });
+      } catch (blockchainError: any) {
+        console.warn('Blockchain submission failed, but challenge is stored in DB:', blockchainError);
+        // Don't throw - challenge is already in DB
+      }
+
+      return data;
     },
     onSuccess: () => {
       toast({
@@ -226,6 +258,7 @@ export default function Challenges() {
       queryClient.invalidateQueries({ queryKey: ["/api/challenges"] });
       setIsCreateDialogOpen(false);
       setCreateFormData({ title: '', description: '', category: 'general', amount: 100 });
+      setPreSelectedUser(null);
     },
     onError: (error: Error) => {
       if (error.message.includes('401') || error.message.includes('Unauthorized')) {

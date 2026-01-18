@@ -6,8 +6,11 @@
 
 import { db } from './db';
 import { notifications } from '../shared/schema';
+import { users } from '../shared/schema';
 import { eq, and, gt, desc } from 'drizzle-orm';
 import Pusher from 'pusher';
+import { sendPushNotification } from './firebase/admin';
+import { initializeFirebase } from './firebase/admin';
 
 export enum NotificationEvent {
   CHALLENGE_CREATED = 'challenge.created',
@@ -81,6 +84,9 @@ export class NotificationService {
       useTLS: true,
     });
     this.rateLimitConfig = rateLimitConfig;
+    
+    // Initialize Firebase Admin SDK for push notifications
+    initializeFirebase();
   }
 
   /**
@@ -273,8 +279,46 @@ export class NotificationService {
    */
   private async sendPush(payload: NotificationPayload): Promise<void> {
     try {
-      // TODO: Integrate with Firebase Cloud Messaging or OneSignal
-      console.log(`📱 [PUSH] ${payload.title}: ${payload.body}`);
+      // Get user's FCM token from database
+      const userRecord = await db
+        .select({ fcmToken: users.fcmToken })
+        .from(users)
+        .where(eq(users.id, payload.userId))
+        .limit(1);
+
+      if (!userRecord || !userRecord[0]?.fcmToken) {
+        console.log(`⚠️  No FCM token found for user ${payload.userId}, skipping push`);
+        return;
+      }
+
+      const fcmToken = userRecord[0].fcmToken;
+
+      // Determine priority
+      const priority = payload.priority === 'high' ? 'high' : 'normal';
+      const requireInteraction = payload.priority === 'high';
+
+      // Send via Firebase Cloud Messaging
+      const sent = await sendPushNotification(
+        fcmToken,
+        payload.title,
+        payload.body,
+        {
+          event: payload.event,
+          challengeId: payload.challengeId,
+          priority: payload.priority,
+          ...payload.data,
+        },
+        {
+          priority,
+          requireInteraction,
+        }
+      );
+
+      if (sent) {
+        console.log(`📱 Push notification sent via Firebase to ${payload.userId}`);
+      } else {
+        console.warn(`📱 Failed to send push notification to ${payload.userId}`);
+      }
     } catch (error) {
       console.error('Error sending push notification:', error);
     }

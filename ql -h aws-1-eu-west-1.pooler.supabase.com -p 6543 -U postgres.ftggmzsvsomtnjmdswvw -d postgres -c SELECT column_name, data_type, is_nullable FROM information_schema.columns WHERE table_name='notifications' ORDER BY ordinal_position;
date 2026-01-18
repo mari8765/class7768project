@@ -1,0 +1,20 @@
+                            Table "public.notifications"
+    Column    |           Type           | Collation | Nullable |      Default      
+--------------+--------------------------+-----------+----------+-------------------
+ id           | uuid                     |           | not null | gen_random_uuid()
+ user_id      | uuid                     |           | not null | 
+ type         | text                     |           | not null | 
+ content      | text                     |           | not null | 
+ read         | boolean                  |           |          | false
+ created_at   | timestamp with time zone |           |          | now()
+ challenge_id | integer                  |           |          | 
+Indexes:
+    "notifications_pkey" PRIMARY KEY, btree (id)
+    "idx_notifications_challenge_id" btree (challenge_id)
+    "idx_notifications_user_id" btree (user_id)
+Foreign-key constraints:
+    "notifications_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Policies:
+    POLICY "Notifications are viewable by the user" FOR SELECT
+      USING ((auth.uid() = user_id))
+
